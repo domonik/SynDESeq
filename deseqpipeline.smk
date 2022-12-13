@@ -11,8 +11,8 @@ rule all:
 
 rule joinDataFrames:
     input:
-        counts = "PipelineData/Data/All_CDS.csv",
-        spike_ins = "PipelineData/Data/All_ERCC.csv"
+        counts = "Data/All_CDS.csv",
+        spike_ins = "Data/All_ERCC.csv"
     output:
         all_counts = "PipelineData/Data/JoinedCounts.csv",
         annotation = "PipelineData/Data/annotation.csv"
