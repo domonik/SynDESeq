@@ -12,9 +12,12 @@ annotationFile <- snakemake@input[["annotation"]]
 
 countData <- as.matrix(read.table(countFile, header = T,  sep="\t", row.names=1, check.names = F, comment.char = ""))
 annotationData <- as.matrix(read.table(annotationFile, header = T, row.names = 1, sep="\t", check.names = F, comment.char = ""))
-
+keep <- rowSums(countData) >= 10
+countData <- countData[keep, ]
 ercc <- grepl("ERCC", rownames(countData))
-dds <- DESeqDataSetFromMatrix(countData = countData, colData = annotationData, design = ~puromycin+fraction)
+formula <- as.formula(snakemake@params[["design"]])
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = annotationData, design = formula)
+
 #dds <- DESeqDataSetFromMatrix(countData = countData, colData = annotationData, design = ~sample_group)
 #dds <- DESeq(dds, controlGenes=ercc)
 dds <- estimateSizeFactors(dds, controlGenes=ercc)

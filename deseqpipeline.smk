@@ -1,12 +1,25 @@
 
-GOI = ["psbA2", "rnpB"]
+GOI = ["psbA2", "rnpB", "pilA1", "psaA", "cmpC", "pixG", "pilB", "pixG;  pisG;  taxP1;  rer1"]
+
+DESIGNS = {
+    "sg": ("~ sample_group", "sample_group"),
+    "pf": ("~ puromycin + fraction", "fraction")
+}
 
 rule all:
     input:
         d = expand(
-            "PipelineData/Plots/pvalvsfoldchange_cond{condition}_base_{baseline}.html",
-            condition=["M", "C"], baseline=["TC"]
-        )
+            "PipelineData/Plots/design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",
+            condition=["M", "C"], baseline=["TC"], design=["pf"]
+        ),
+        d2 = expand(
+            "PipelineData/Plots/design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",
+            condition=["FM", "FC"], baseline=["FTC"], design=["sg"]
+        ),
+        d3= expand(
+            "PipelineData/Plots/design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",
+            condition=["TM", "TC"],baseline=["TTC"],design=["sg"]
+        ),
 
 
 rule joinDataFrames:
@@ -52,10 +65,12 @@ rule DESeq2:
         annotation = rules.joinDataFrames.output.annotation
     output:
         #dedata = "Analyzed/deseq_data.csv",
-        pca_data = "PipelineData/Analyzed/normed_pca.csv",
-        heatmap = "PipelineData/Plots/correltation.pdf",
-        dispest = "PipelineData/Plots/dispersionestimates.png",
-        deseq_result = "PipelineData/Analyzed/deseq_res_obj.RData"
+        pca_data = "PipelineData/Analyzed/design_{design}_normed_pca.csv",
+        heatmap = "PipelineData/Plots/design_{design}_correltation.pdf",
+        dispest = "PipelineData/Plots/design_{design}_dispersionestimates.png",
+        deseq_result = "PipelineData/Analyzed/design_{design}_deseq_res_obj.RData"
+    params:
+        design = lambda wildcards: DESIGNS[wildcards.design][0]
     script:
         "deseq.R"
 
@@ -63,7 +78,7 @@ rule PlotPCA:
     input:
         pca_data = rules.DESeq2.output.pca_data
     output:
-        pca_plot = "PipelineData/Plots/pca_plot.html"
+        pca_plot = "PipelineData/Plots/design_{design}_pca_plot.html"
     run:
         import pandas as pd
         import plotly.express as px
@@ -74,8 +89,10 @@ rule PlotPCA:
 rule extract_result:
     input:
         deseq_result = rules.DESeq2.output.deseq_result
+    params:
+        design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
-        result_table = "PipelineData/Tables/deseq_{condition}_vs_{baseline}.tsv"
+        result_table = "PipelineData/Tables/design_{design}_deseq_{condition}_vs_{baseline}.tsv"
     script: "extractDESeqResult.R"
 
 
@@ -84,7 +101,7 @@ rule plotFoldPval:
         table = rules.extract_result.output.result_table,
         tag2name = "locusTagtoGeneName.csv"
     output:
-        plot = "PipelineData/Plots/pvalvsfoldchange_cond{condition}_base_{baseline}.html"
+        plot = "PipelineData/Plots/design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html"
     run:
         import pandas as pd
         import plotly.graph_objs as go
