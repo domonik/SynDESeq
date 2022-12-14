@@ -1,5 +1,12 @@
+
+if (!require("BiocManager", quietly = TRUE)){
+
+    install.packages("BiocManager", repos = "http://cran.us.r-project.org")
+
+}
+BiocManager::install(c("DESeq2" ))
 suppressPackageStartupMessages({
-    require(DESeq2)
+  require(DESeq2)
 })
 
 

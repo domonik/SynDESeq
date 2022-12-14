@@ -1,8 +1,15 @@
+if (!require("BiocManager", quietly = TRUE)){
+
+    install.packages("BiocManager", repos = "http://cran.us.r-project.org")
+
+}
+BiocManager::install(c("DESeq2", "pheatmap"))
 suppressPackageStartupMessages({
-    require(DESeq2)
-    require(pheatmap)
-    require(ggplot2)
+  require(DESeq2)
+  require(pheatmap)
 })
+
+
 
 countFile <- snakemake@input[["counts"]]
 annotationFile <- snakemake@input[["annotation"]]
