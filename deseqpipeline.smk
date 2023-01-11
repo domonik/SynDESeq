@@ -1,14 +1,12 @@
 
-GOI = ["psbA2", "rnpB", "pilA1", "psaA", "cmpC", "pixG", "pilB", "pixG;  pisG;  taxP1;  rer1"]
+GOI = ["psbA2", "rnpB", "pilA1", "psaA", "cmpC", "pixG", "pilB", "pixG;  pisG;  taxP1;  rer1", "kpsM"]
 
+# This maps file names to the corresponding DESeq2 design formula
 DESIGNS = {
-    "sg": ("~ sample_group", "sample_group"),
-    "pf": ("~ fraction", "fraction"),
-    "ldpf": ("~ light_dark  + fraction", "fraction"),
-    "pfld": ("~ fraction + light_dark", "light_dark"),
-    "ld": ("~ light_dark ", "light_dark"),
+    "rf": ("~ replicate + fraction", "fraction"),
 }
 
+# Just a condition map for nicer Plots
 CONDIMAP = {
     "M": "Membrane",
     "TC": "Total Cell",
@@ -21,27 +19,22 @@ CONDIMAP = {
 
 rule all:
     input:
-        d3= expand(
-            "PipelineData/Plots/Light_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",
-            condition=["M"],baseline=["TC"],design=["pf"]
-        ),
-
         ld = expand(
-            "PipelineData/Plots/LightDark_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html", zip,
-            condition=["L", "M"],baseline=["D", "TC"],design=["pfld", "ldpf"]
+            "PipelineData/Plots/Vulcano/{mode}_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html", zip,
+            condition=["M", "M", "M"], baseline=["TC", "TC", "TC"], design=["rf", "rf", "rf"], mode=["Light", "LightDark", "LightDarkLight"]
         ),
-        ldn= expand(
-        "PipelineData/Plots/NormLightDark_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",zip,
-            condition=["L"],baseline=["D"],design=["ld"]
+        ld3= expand(
+            "PipelineData/Plots/Vulcano/{mode}_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",zip,
+            condition=["C", "C", "C"],baseline=["TC", "TC", "TC"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
+                                                                                              "LightDarkLight"]
+        ),
+        ld2 = expand(
+            "PipelineData/Plots/Vulcano/{mode}_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html",zip,
+            condition=["M", "M", "M"],baseline=["C", "C", "C"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
+                                                                                                  "LightDarkLight"]
             ),
-        pca = expand(
-            "PipelineData/Plots/{mode}_design_{design}_pca_plot.html",
-            mode=["LightDark"], design=["ldpf"]
-        ),
-        pca2 = expand(
-            "PipelineData/Plots/{mode}_design_{design}_pca_plot.html",
-            mode=["Light"],design=["pf"]
-            )
+
+
 
 
 
@@ -66,6 +59,7 @@ rule joinDataFrames:
             "replicate": [],
             "sample_group": [],
         }
+        # Constructing the annotation File for DESeq and renaming columns for the Light experiment
         for col in df.columns:
             name = "_".join(col.replace("-", "minus_").split("_")[1:])
             data["name"].append(name)
@@ -82,7 +76,6 @@ rule joinDataFrames:
         df.to_csv(output.all_counts, sep="\t")
         annotation = pd.DataFrame(data)
         annotation.to_csv(output.annotation, index=False, sep="\t")
-
 
 
 
@@ -103,13 +96,15 @@ rule clean_light_dark:
             "light_dark": [],
             "sample_group": [],
         }
+        # Constructing the annotation File for DESeq and renaming columns for the Light Dark experiment
+
         for col in df.columns:
             name = "_".join(col.split("_")[1:5])
             name = name.replace("plusP", "plus_P")
             name = name.replace("minP", "minus_P")
-            print(name)
             data["name"].append(name)
             mp, p, frac, ld, rep = name.split("_")
+            rep = f"RD{rep[-1]}"
             p = True if mp == "plus" else False
 
             sgroup = f"{str(p)[0]}_{frac}_{ld}"
@@ -125,17 +120,20 @@ rule clean_light_dark:
         annotation = pd.DataFrame(data)
         annotation.to_csv(output.annotation, index=False, sep="\t")
 
-rule dropPuromycin:
+
+
+
+rule dropPuromycinandDark:
     input:
         counts = rules.joinDataFrames.output.all_counts,
         annotation = rules.joinDataFrames.output.annotation,
         counts_ld = rules.clean_light_dark.output.table,
         annotation_ld = rules.clean_light_dark.output.annotation
     output:
-        counts = "PipelineData/Data/JoinedCountsNoP.csv",
-        annotation = "PipelineData/Data/annotationNoP.csv",
-        counts_ld = "PipelineData/Data/cleaned_LightDarkNoP.csv",
-        annotation_ld ="PipelineData/Data/annotation_LightDarkNoP.csv"
+        counts = "PipelineData/Data/JoinedCountsNoPD.csv",
+        annotation = "PipelineData/Data/annotationNoPD.csv",
+        counts_ld = "PipelineData/Data/cleaned_LightDarkNoPD.csv",
+        annotation_ld ="PipelineData/Data/annotation_LightDarkNoPD.csv"
     run:
         import pandas as pd
         df = pd.read_csv(input.counts,index_col=0, sep="\t")
@@ -149,13 +147,45 @@ rule dropPuromycin:
         annotation = pd.read_csv(input.annotation_ld,index_col=0,sep="\t")
         df = df.loc[:, annotation["puromycin"] != True]
         annotation = annotation[annotation["puromycin"] != True]
+        df = df.loc[:, annotation["light_dark"] != "D"]
+        annotation = annotation.loc[annotation["light_dark"] != "D"]
         df.to_csv(output.counts_ld,sep="\t")
         annotation.to_csv(output.annotation_ld,sep="\t")
 
-rule DESeq2:
+rule joinLightDarkLight:
     input:
-        counts = rules.dropPuromycin.output.counts,
-        annotation = rules.dropPuromycin.output.annotation
+        ldcounts = rules.dropPuromycinandDark.output.counts_ld,
+        ldanno = rules.dropPuromycinandDark.output.annotation_ld,
+        lcounts = rules.dropPuromycinandDark.output.counts,
+        lanno = rules.dropPuromycinandDark.output.annotation,
+    output:
+        counts = "PipelineData/Data/LightDarkLightJoinedCountsNoPD.csv",
+        annotation = "PipelineData/Data/LightDarkLightannotationNoPD.csv",
+    run:
+        import pandas as pd
+        lddf = pd.read_csv(input.ldcounts,index_col=0,sep="\t")
+        ldannotation = pd.read_csv(input.ldanno,index_col=0,sep="\t")
+        ldannotation["dataset"] = "LD"
+        ldannotation = ldannotation.drop(("light_dark"), axis=1)
+        ldf = pd.read_csv(input.lcounts,index_col=0,sep="\t")
+        lannotation = pd.read_csv(input.lanno,index_col=0,sep="\t")
+        lannotation["dataset"] = "L"
+        df = pd.concat((lddf, ldf), axis=1)
+        annotation = pd.concat((ldannotation, lannotation), axis=0)
+        df = df[~df.index.str.contains("ERCC")]
+        df.to_csv(output.counts, sep="\t")
+        annotation.to_csv(output.annotation, sep="\t")
+
+
+rule DESeq2:
+    """
+    This rule just runs DESeq for a given design formula for the Light experiment.
+    It uses spike ins for normalization
+    """
+
+    input:
+        counts = rules.dropPuromycinandDark.output.counts,
+        annotation = rules.dropPuromycinandDark.output.annotation
     output:
         pca_data = "PipelineData/Analyzed/Light_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/Light_design_{design}_correltation.pdf",
@@ -167,29 +197,10 @@ rule DESeq2:
         "deseq.R"
 
 
-
-
-
-rule dropUnusedColumns:
-    input:
-        ld = rules.dropPuromycin.output.counts_ld,
-        ldann = rules.dropPuromycin.output.annotation_ld,
-    output:
-        counts = "PipelineData/Data/cleaned_LightDarkLight.csv",
-        annotation =  "PipelineData/Data/annotation_LightDarkLight.csv"
-    run:
-        import pandas as pd
-        ld = pd.read_csv(input.ld, sep="\t", index_col=0)
-        ldann = pd.read_csv(input.ldann, sep="\t", index_col=0)
-        df = ld.loc[:, (ld.columns.str.contains("minus_P_TC_L_")) | (ld.columns.str.contains("minus_P_TC_D_"))]
-        ann = ldann[(ldann.index.str.contains("minus_P_TC_L_")) | (ldann.index.str.contains("minus_P_TC_D_"))]
-        df.to_csv(output.counts, sep="\t")
-        ann.to_csv(output.annotation, sep="\t")
-
-
-
-
 rule extract_result_Light:
+    """
+    This basically calls results using a given comparison on the DESeq object
+    """
     input:
         deseq_result = "PipelineData/Analyzed/Light_design_{design}_deseq_res_obj.RData"
     params:
@@ -200,75 +211,54 @@ rule extract_result_Light:
 
 
 
-rule LightDarkNormDESeq:
+rule least_significant_Light:
+    """
+    Identifies least significantly different regulated genes of the Light experiment using
+    only Total cell vs Membrane. This set is used as control genes to normalize the LightDark set
+    """
     input:
-        counts = rules.dropUnusedColumns.output.counts,
-        annotation = rules.dropUnusedColumns.output.annotation,
-        norm_genes = "Data/normGene.tsv"
-    output:
-        pca_data = "PipelineData/Analyzed/NormLightDark_design_{design}_normed_pca.csv",
-        heatmap = "PipelineData/Plots/NormLightDark_design_{design}_correltation.pdf",
-        dispest = "PipelineData/Plots/NormLightDark_design_{design}_dispersionestimates.png",
-        deseq_result = "PipelineData/Analyzed/NormLightDark_design_{design}_deseq_res_obj.RData"
-    params:
-        design = lambda wildcards: DESIGNS[wildcards.design][0]
-    script:
-        "deseqLightDark.R"
-
-rule extract_result_NormLightDark:
-    input:
-        deseq_result = "PipelineData/Analyzed/NormLightDark_design_{design}_deseq_res_obj.RData"
-    params:
-        design = lambda wildcards: DESIGNS[wildcards.design][1]
-    output:
-        result_table = "PipelineData/Tables/NormLightDark_design_{design}_deseq_{condition}_vs_{baseline}.tsv"
-    script: "extractDESeqResult.R"
-
-
-rule least_significant_LightDark:
-    input:
-        ld = expand(
-            "PipelineData/Tables/NormLightDark_design_{design}_deseq_{condition}_vs_{baseline}.tsv", zip,
-            design=["ld"], condition=["D"], baseline=["L"]
-        ),
-        tcm = "PipelineData/Tables/Light_design_pf_deseq_M_vs_TC.tsv"
+        tcm = "PipelineData/Tables/Light_design_rf_deseq_M_vs_TC.tsv"
     output:
         least_significant_list = "PipelineData/Tables/least_sig_NormLightDark.tsv"
     run:
         import pandas as pd
-        dfs = [input.ld[0], input.tcm]
-        subdfs = []
-        for file in dfs:
-            df = pd.read_csv(file, sep="\t", index_col=0)
-            df["absChange"] = df["log2FoldChange"].abs()
-            subdf = df
-            subdf = df[df["absChange"] < 1]
-            subdf = subdf[subdf["baseMean"] > 10]
-            subdf = subdf[subdf["padj"] >= 0.05]
-            subdf = subdf.sort_values(by=["padj", "absChange"], ascending=[False, True])
-            #subdf = subdf.iloc[0:200]
-            subdf.index = subdf.index.astype("string")
-            subdfs.append(subdf)
-        intersect = set(subdfs[0].index)
-        for df in subdfs[1:]:
-            intersect = intersect & set(df.index)
-
-        outdf = pd.DataFrame(
-            index=list(intersect)
-        )
+        file = input.tcm
+        df = pd.read_csv(file, sep="\t", index_col=0)
+        df["absChange"] = df["log2FoldChange"].abs()
+        subdf = df
+        subdf = df[df["absChange"] < 0.1]
+        subdf = subdf[subdf["baseMean"] > 100]
+        subdf = subdf[subdf["padj"] >= 0.05]
+        subdf = subdf.sort_values(by=["absChange", "padj"], ascending=[True, False])
+        outdf = subdf[0:30]
         outdf.to_csv(output.least_significant_list, sep="\t")
 
 
 rule LightDarkDESeq:
     input:
-        counts = rules.dropPuromycin.output.counts_ld,
-        annotation = rules.dropPuromycin.output.annotation_ld,
-        norm_genes = rules.least_significant_LightDark.output.least_significant_list
+        counts = rules.dropPuromycinandDark.output.counts_ld,
+        annotation = rules.dropPuromycinandDark.output.annotation_ld,
+        norm_genes = rules.least_significant_Light.output.least_significant_list
     output:
         pca_data = "PipelineData/Analyzed/LightDark_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/LightDark_design_{design}_correltation.pdf",
         dispest = "PipelineData/Plots/LightDark_design_{design}_dispersionestimates.png",
         deseq_result = "PipelineData/Analyzed/LightDark_design_{design}_deseq_res_obj.RData"
+    params:
+        design = lambda wildcards: DESIGNS[wildcards.design][0]
+    script:
+        "deseqLightDark.R"
+
+rule LightDarkLightDESeq:
+    input:
+        counts = rules.joinLightDarkLight.output.counts,
+        annotation = rules.joinLightDarkLight.output.annotation,
+        norm_genes = rules.least_significant_Light.output.least_significant_list
+    output:
+        pca_data = "PipelineData/Analyzed/LightDarkLight_design_{design}_normed_pca.csv",
+        heatmap = "PipelineData/Plots/LightDarkLight_design_{design}_correltation.pdf",
+        dispest = "PipelineData/Plots/LightDarkLight_design_{design}_dispersionestimates.png",
+        deseq_result = "PipelineData/Analyzed/LightDarkLight_design_{design}_deseq_res_obj.RData"
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][0]
     script:
@@ -284,12 +274,22 @@ rule extract_result_LightDark:
     script: "extractDESeqResult.R"
 
 
+rule extract_result_LightDarkLight:
+    input:
+        deseq_result = "PipelineData/Analyzed/LightDarkLight_design_{design}_deseq_res_obj.RData"
+    params:
+        design = lambda wildcards: DESIGNS[wildcards.design][1]
+    output:
+        result_table = "PipelineData/Tables/LightDarkLight_design_{design}_deseq_{condition}_vs_{baseline}.tsv"
+    script: "extractDESeqResult.R"
+
+
 rule plotFoldPval:
     input:
         table = "PipelineData/Tables/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
         tag2name = "locusTagtoGeneName.csv"
     output:
-        plot = "PipelineData/Plots/{mode}_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html"
+        plot = "PipelineData/Plots/Vulcano/{mode}_design_{design}_pvalvsfoldchange_cond{condition}_base_{baseline}.html"
     run:
         import pandas as pd
         import plotly.graph_objs as go
@@ -303,7 +303,15 @@ rule plotFoldPval:
         df["-log10padj"] = -1 * np.log10(df["padj"])
         sig = df[df["gene_name"].isin(GOI)]
         nsig = df[~df["gene_name"].isin(GOI)]
+        utrs = df[df.index.str.contains("UTR")]
         fig = go.Figure()
+        sig["gene_name"] = sig["gene_name"].str.cat(sig.index, sep="-")
+        nsig["gene_name"] = nsig["gene_name"].str.cat(nsig.index, sep="-")
+        utrs["gene_name"] = utrs["gene_name"].str.cat(utrs.index, sep="-")
+        gpval = nsig[(nsig["padj"]<= 0.05) & ((nsig["log2FoldChange"] >= 1)|(nsig["log2FoldChange"] <= -1))]
+        gpval2 = sig[(sig["padj"]<= 0.05) & ((sig["log2FoldChange"] >= 1)| (sig["log2FoldChange"] <= -1))]
+
+        nrsig = len(gpval.index) + len(gpval2.index)
 
         fig.add_trace(go.Scatter(
             x=nsig["log2FoldChange"],y=nsig["-log10padj"], mode="markers", marker=dict(color="blue"),
@@ -316,7 +324,7 @@ rule plotFoldPval:
 
         ))
         fig.add_trace(go.Scatter(
-            x=sig["log2FoldChange"], y=sig["-log10padj"], mode="markers", marker=dict(color="red", size=20),
+            x=sig["log2FoldChange"], y=sig["-log10padj"], mode="markers", marker=dict(color="red", size=10),
             hovertemplate=
             '<i>Y</i>: %{y:.2f}' +
             '<br><b>X</b>: %{x}<br>' +
@@ -324,7 +332,17 @@ rule plotFoldPval:
             text=sig["gene_name"],
             name="Interesting Genes"
         ))
-        ptitle = f"Set:{wildcards.mode} Condition:{CONDIMAP[wildcards.condition]} vs Base:{CONDIMAP[wildcards.baseline]}"
+        fig.add_trace(go.Scatter(
+            x=utrs["log2FoldChange"],y=utrs["-log10padj"],mode="markers",marker=dict(color="green"),
+            hovertemplate=
+            '<i>Y</i>: %{y:.2f}' +
+            '<br><b>X</b>: %{x}<br>' +
+            '<b>%{text}</b>',
+            text=utrs["gene_name"],
+            name="UTRs",
+            visible="legendonly"
+        ))
+        ptitle = f"Set:{wildcards.mode} Condition:{CONDIMAP[wildcards.condition]} vs Base:{CONDIMAP[wildcards.baseline]} significant:{nrsig}"
         fig.update_layout(
             title=ptitle,
             xaxis_title="Log2FoldChange",
@@ -334,7 +352,7 @@ rule plotFoldPval:
                 size=18,
             )
         )
-        fig.add_hline(-1* np.log10(0.005))
+        fig.add_hline(-1* np.log10(0.05))
         fig.write_html(output.plot)
 
 rule PlotPCA:
