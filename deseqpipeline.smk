@@ -33,9 +33,28 @@ rule all:
             condition=["M", "M", "M"],baseline=["C", "C", "C"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
                                                                                                   "LightDarkLight"]
             ),
+        foo = expand(
+            "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv",zip,
+            condition=["M"],baseline=["C"],design=["rf"], mode=["LightDark"]
+            ),
 
 
+rule setup:
+    """Installs R dependencies"""
+    output:
+        install_file = "InstallFinished.txt"
+    script: "setup.R"
 
+
+rule GOSetup:
+    input:
+        locustag2GO = "20200113_locusTags_GOterms.tsv",
+        locustag2Symbol = "locusTagtoGeneName.csv",
+        setup = rules.setup.output.install_file
+    output:
+        finished_file = "PipelineData/AnnotationBuild.txt",
+        annodb = temporary(directory("PipelineData/AnnotationDB"))
+    script: "createAnnotationFile.R"
 
 
 
@@ -73,6 +92,7 @@ rule joinDataFrames:
         df.columns = data["name"]
         df.index.name = None
         df.index = df.index.str.replace("'", "")
+        #df = df[~df.index.str.contains("UTR")]
         df.to_csv(output.all_counts, sep="\t")
         annotation = pd.DataFrame(data)
         annotation.to_csv(output.annotation, index=False, sep="\t")
@@ -116,6 +136,7 @@ rule clean_light_dark:
         df.columns = data["name"]
         df.index.name = None
         df.index = df.index.str.replace("'","")
+        #df = df[~df.index.str.contains("UTR")]
         df.to_csv(output.table, sep="\t")
         annotation = pd.DataFrame(data)
         annotation.to_csv(output.annotation, index=False, sep="\t")
@@ -148,7 +169,9 @@ rule dropPuromycinandDark:
         df = df.loc[:, annotation["puromycin"] != True]
         annotation = annotation[annotation["puromycin"] != True]
         df = df.loc[:, annotation["light_dark"] != "D"]
+        df = df.loc[:, ~((annotation["replicate"] == "RD2") & (annotation["fraction"] == "M"))]
         annotation = annotation.loc[annotation["light_dark"] != "D"]
+        annotation = annotation.loc[~((annotation["replicate"] == "RD2") & (annotation["fraction"] == "M"))]
         df.to_csv(output.counts_ld,sep="\t")
         annotation.to_csv(output.annotation_ld,sep="\t")
 
@@ -185,7 +208,8 @@ rule DESeq2:
 
     input:
         counts = rules.dropPuromycinandDark.output.counts,
-        annotation = rules.dropPuromycinandDark.output.annotation
+        annotation = rules.dropPuromycinandDark.output.annotation,
+        setup = rules.setup.output.install_file
     output:
         pca_data = "PipelineData/Analyzed/Light_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/Light_design_{design}_correltation.pdf",
@@ -214,10 +238,10 @@ rule extract_result_Light:
 rule least_significant_Light:
     """
     Identifies least significantly different regulated genes of the Light experiment using
-    only Total cell vs Membrane. This set is used as control genes to normalize the LightDark set
+    only Cytosol vs Membrane. This set is used as control genes to normalize the LightDark set
     """
     input:
-        tcm = "PipelineData/Tables/Light_design_rf_deseq_M_vs_TC.tsv"
+        tcm = "PipelineData/Tables/Light_design_rf_deseq_M_vs_C.tsv"
     output:
         least_significant_list = "PipelineData/Tables/least_sig_NormLightDark.tsv"
     run:
@@ -230,7 +254,7 @@ rule least_significant_Light:
         subdf = subdf[subdf["baseMean"] > 100]
         subdf = subdf[subdf["padj"] >= 0.05]
         subdf = subdf.sort_values(by=["absChange", "padj"], ascending=[True, False])
-        outdf = subdf[0:30]
+        outdf = subdf[0:100]
         outdf.to_csv(output.least_significant_list, sep="\t")
 
 
@@ -238,7 +262,8 @@ rule LightDarkDESeq:
     input:
         counts = rules.dropPuromycinandDark.output.counts_ld,
         annotation = rules.dropPuromycinandDark.output.annotation_ld,
-        norm_genes = rules.least_significant_Light.output.least_significant_list
+        norm_genes = rules.least_significant_Light.output.least_significant_list,
+        setup = rules.setup.output.install_file
     output:
         pca_data = "PipelineData/Analyzed/LightDark_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/LightDark_design_{design}_correltation.pdf",
@@ -253,7 +278,8 @@ rule LightDarkLightDESeq:
     input:
         counts = rules.joinLightDarkLight.output.counts,
         annotation = rules.joinLightDarkLight.output.annotation,
-        norm_genes = rules.least_significant_Light.output.least_significant_list
+        norm_genes = rules.least_significant_Light.output.least_significant_list,
+        setup = rules.setup.output.install_file
     output:
         pca_data = "PipelineData/Analyzed/LightDarkLight_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/LightDarkLight_design_{design}_correltation.pdf",
@@ -266,7 +292,8 @@ rule LightDarkLightDESeq:
 
 rule extract_result_LightDark:
     input:
-        deseq_result = "PipelineData/Analyzed/LightDark_design_{design}_deseq_res_obj.RData"
+        deseq_result = "PipelineData/Analyzed/LightDark_design_{design}_deseq_res_obj.RData",
+        setup = rules.setup.output.install_file
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
@@ -276,7 +303,8 @@ rule extract_result_LightDark:
 
 rule extract_result_LightDarkLight:
     input:
-        deseq_result = "PipelineData/Analyzed/LightDarkLight_design_{design}_deseq_res_obj.RData"
+        deseq_result = "PipelineData/Analyzed/LightDarkLight_design_{design}_deseq_res_obj.RData",
+        setup= rules.setup.output.install_file
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
@@ -369,3 +397,18 @@ rule PlotPCA:
 
 
 
+rule KEGGEnrichment:
+    input:
+        defile = "PipelineData/Tables/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
+        setup = rules.setup.output.install_file
+    output:
+        file = "PipelineData/Enrichment/KEGG/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv"
+    script: "keggenrichment.R"
+
+rule GOEnrichment:
+    input:
+        setup = rules.GOSetup.output.finished_file,
+        defile = "PipelineData/Tables/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
+    output:
+        file = "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv"
+    script: "GOEnrichment.R"
