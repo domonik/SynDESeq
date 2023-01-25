@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
 print(keytypes(org.Ssp.eg.db))
 
 defile <- snakemake@input[["defile"]]
+ontology <- snakemake@wildcards[["ontology"]]
 
 detable <- read.table(defile,sep="\t",header=TRUE)
 detable <- na.omit(detable)
@@ -20,7 +21,7 @@ egoBPup <- enrichGO(gene = as.character(rownames(up)),
                     universe = as.character(rownames(detable)),
                     OrgDb = org.Ssp.eg.db,
                     keyType = "GID",
-                    ont = "CC",
+                    ont = ontology,
                     pAdjustMethod = "BH",
                     pvalueCutoff = 0.05,
                     qvalueCutoff = 0.05,
@@ -34,7 +35,7 @@ egoBPdown <- enrichGO(gene = as.character(rownames(down)),
                     universe = as.character(rownames(detable)),
                     OrgDb = org.Ssp.eg.db,
                     keyType = "GID",
-                    ont = "CC",
+                    ont = ontology,
                     pAdjustMethod = "BH",
                     pvalueCutoff = 0.05,
                     qvalueCutoff = 0.05,

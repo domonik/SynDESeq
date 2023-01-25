@@ -35,11 +35,11 @@ rule all:
             ),
         enrich1 = expand(
             "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html" ,
-            condition=["M"],baseline=["C", "TC"],design=["rf"], mode=["Light", "LightDark", "LightDarkLight"], enrichment=["GO", "KEGG"], updown=["upregulated", "downregulated"]
+            condition=["M"],baseline=["C", "TC"],design=["rf"], mode=["Light", "LightDark", "LightDarkLight"], enrichment=[ "KEGG"], updown=["upregulated", "downregulated"]
             ),
         enrich2= expand(
-            "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html",
-                condition=["C"],baseline=["TC"],design=["rf"],mode=["Light", "LightDark", "LightDarkLight"],enrichment=["GO", "KEGG"],updown=["upregulated", "downregulated"]
+            "PipelineData/Plots/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}_ont{ontology}.html",
+                condition=["M"],baseline=["C", "TC"],design=["rf"],mode=["Light", "LightDark", "LightDarkLight"],enrichment=["GO"],updown=["upregulated", "downregulated"], ontology=["CC", "MF", "BP"]
         ),
 
 
@@ -67,8 +67,8 @@ rule joinDataFrames:
         counts = "Data/All_CDS.csv",
         spike_ins = "Data/All_ERCC.csv"
     output:
-        all_counts = "PipelineData/Data/JoinedCounts.csv",
-        annotation = "PipelineData/Data/annotation.csv"
+        all_counts = "PipelineData/IntermediateData/JoinedCounts.csv",
+        annotation = "PipelineData/IntermediateData/annotation.csv"
     run:
         import pandas as pd
         df = pd.read_csv(input.counts, index_col=0)
@@ -107,8 +107,8 @@ rule clean_light_dark:
     input:
         table = "Data/CDS_LightDark.csv"
     output:
-        table = "PipelineData/Data/cleaned_LightDark.csv",
-        annotation =  "PipelineData/Data/annotation_LightDark.csv"
+        table = "PipelineData/IntermediateData/cleaned_LightDark.csv",
+        annotation =  "PipelineData/IntermediateData/annotation_LightDark.csv"
     run:
         import pandas as pd
         df = pd.read_csv(input.table, sep=",", index_col=0)
@@ -155,10 +155,10 @@ rule dropPuromycinandDark:
         counts_ld = rules.clean_light_dark.output.table,
         annotation_ld = rules.clean_light_dark.output.annotation
     output:
-        counts = "PipelineData/Data/JoinedCountsNoPD.csv",
-        annotation = "PipelineData/Data/annotationNoPD.csv",
-        counts_ld = "PipelineData/Data/cleaned_LightDarkNoPD.csv",
-        annotation_ld ="PipelineData/Data/annotation_LightDarkNoPD.csv"
+        counts = "PipelineData/IntermediateData/JoinedCountsNoPD.csv",
+        annotation = "PipelineData/IntermediateData/annotationNoPD.csv",
+        counts_ld = "PipelineData/IntermediateData/cleaned_LightDarkNoPD.csv",
+        annotation_ld ="PipelineData/IntermediateData/annotation_LightDarkNoPD.csv"
     run:
         import pandas as pd
         df = pd.read_csv(input.counts,index_col=0, sep="\t")
@@ -186,8 +186,8 @@ rule joinLightDarkLight:
         lcounts = rules.dropPuromycinandDark.output.counts,
         lanno = rules.dropPuromycinandDark.output.annotation,
     output:
-        counts = "PipelineData/Data/LightDarkLightJoinedCountsNoPD.csv",
-        annotation = "PipelineData/Data/LightDarkLightannotationNoPD.csv",
+        counts = "PipelineData/IntermediateData/LightDarkLightJoinedCountsNoPD.csv",
+        annotation = "PipelineData/IntermediateData/LightDarkLightannotationNoPD.csv",
     run:
         import pandas as pd
         lddf = pd.read_csv(input.ldcounts,index_col=0,sep="\t")
@@ -288,7 +288,7 @@ rule LightDarkLightDESeq:
         pca_data = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/Correlation/setLightDarkLight_design_{design}_correltation.pdf",
         dispest = "PipelineData/Plots/Dispersion/setLightDarkLight_design_{design}_dispersionestimates.png",
-        condresult = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_deseq_res_obj.RData"
+        deseq_result = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_deseq_res_obj.RData"
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][0]
     script:
@@ -312,7 +312,7 @@ rule extract_result_LightDarkLight:
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
-        result_table = "PipelineData/Tables/DESeq/setLightDarkLight_design_{design}_cond{condition}_vs{baseline}.tsv"
+        result_table = "PipelineData/Tables/DESeq/setLightDarkLight_design_{design}_cond{condition}_vs_base{baseline}.tsv"
     script: "extractDESeqResult.R"
 
 
@@ -415,33 +415,48 @@ rule GOEnrichment:
         setup = rules.GOSetup.output.finished_file,
         defile = "PipelineData/Tables/DESeq/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.tsv",
     output:
-        up = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_upregulated.tsv",
-        down = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_downregulated.tsv"
+        up = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_upregulated_ont{ontology}.tsv",
+        down = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_downregulated_ont{ontology}.tsv"
     script: "GOEnrichment.R"
 
 
-rule PlotEnrichment:
-    input:
-        table = "PipelineData/Tables/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.tsv"
-    output:
-        plot =  "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html"
-    run:
-        import plotly.graph_objects as go
-        import plotly.express as px
-        import pandas as pd
-        enriched = pd.read_csv(input.table, sep="\t")
-        if len(enriched) == 0:
-            raise IndexError("Table is empty: Nothing to plot")
-        fig = px.bar(enriched, x="Count", y="Description", color="p.adjust")
-        ptitle = f"{wildcards.updown.upper()} Set:{wildcards.mode} Condition:{CONDIMAP[wildcards.condition]} vs Base:{CONDIMAP[wildcards.baseline]}"
+def plot_enrichment(input, output, wildcards):
+    import plotly.graph_objects as go
+    import plotly.express as px
+    import pandas as pd
+    enriched = pd.read_csv(input.table,sep="\t")
+    if len(enriched) == 0:
+        raise IndexError("Table is empty: Nothing to plot")
+    fig = px.bar(enriched,x="Count",y="Description",color="p.adjust")
+    ptitle = f"{wildcards.updown.upper()} Set:{wildcards.mode} Condition:{CONDIMAP[wildcards.condition]} vs Base:{CONDIMAP[wildcards.baseline]}"
+    try:
+        ptitle += f" Ontology:{wildcards.ontology}"
+    except AttributeError as e:
+        print(e)
+    fig.update_layout(
+        title=ptitle,
+        legend_title="Interesting or not",
+        font=dict(
+            size=18,
+        ),
+        yaxis={'categoryorder': 'total ascending'}
+    )
+    #fig.update_coloraxes(reversescale=True)
+    fig.write_html(output.plot)
 
-        fig.update_layout(
-            title=ptitle,
-            legend_title="Interesting or not",
-            font=dict(
-                size=18,
-            ),
-            yaxis = {'categoryorder': 'total ascending'}
-        )
-        #fig.update_coloraxes(reversescale=True)
-        fig.write_html(output.plot)
+rule PlotEnrichmentGO:
+    input:
+        table = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}_ont{ontology}.tsv"
+    output:
+        plot =  "PipelineData/Plots/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}_ont{ontology}.html"
+    run:
+        plot_enrichment(input, output, wildcards)
+
+rule PlotEnrichmenKEGG:
+    input:
+        table = "PipelineData/Tables/Enrichment/KEGG_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.tsv"
+    output:
+        plot =  "PipelineData/Plots/Enrichment/KEGG_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html"
+    run:
+        plot_enrichment(input, output, wildcards)
+
