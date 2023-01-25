@@ -20,25 +20,25 @@ CONDIMAP = {
 rule all:
     input:
         ld = expand(
-            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_base_{baseline}.html", zip,
+            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.html", zip,
             condition=["M", "M", "M"], baseline=["TC", "TC", "TC"], design=["rf", "rf", "rf"], mode=["Light", "LightDark", "LightDarkLight"]
         ),
         ld3= expand(
-            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_base_{baseline}.html",zip,
+            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.html",zip,
             condition=["C", "C", "C"],baseline=["TC", "TC", "TC"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
                                                                                               "LightDarkLight"]
         ),
         ld2 = expand(
-            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_base_{baseline}.html",zip,
+            "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.html",zip,
             condition=["M", "M", "M"],baseline=["C", "C", "C"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
                                                                                                   "LightDarkLight"]
             ),
         enrich1 = expand(
-            "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html" ,
+            "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html" ,
             condition=["M"],baseline=["C", "TC"],design=["rf"], mode=["Light", "LightDark", "LightDarkLight"], enrichment=["GO", "KEGG"], updown=["upregulated", "downregulated"]
             ),
         enrich2= expand(
-            "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html",
+            "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html",
                 condition=["C"],baseline=["TC"],design=["rf"],mode=["Light", "LightDark", "LightDarkLight"],enrichment=["GO", "KEGG"],updown=["upregulated", "downregulated"]
         ),
 
@@ -234,7 +234,7 @@ rule extract_result_Light:
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
-        result_table = "PipelineData/Tables/DESeq/setLight_design_{design}_deseq_{condition}_vs_{baseline}.tsv"
+        result_table = "PipelineData/Tables/DESeq/setLight_design_{design}_cond{condition}_vs_base{baseline}.tsv"
     script: "extractDESeqResult.R"
 
 
@@ -245,7 +245,7 @@ rule least_significant_Light:
     only Cytosol vs Membrane. This set is used as control genes to normalize the LightDark set
     """
     input:
-        tcm = "PipelineData/Tables/DESeq/setLight_design_rf_deseq_M_vs_C.tsv"
+        tcm = "PipelineData/Tables/DESeq/setLight_design_rf_condM_vs_baseC.tsv"
     output:
         least_significant_list = "PipelineData/IntermediateData/least_sig_NormLightDark.tsv"
     run:
@@ -288,7 +288,7 @@ rule LightDarkLightDESeq:
         pca_data = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_normed_pca.csv",
         heatmap = "PipelineData/Plots/Correlation/setLightDarkLight_design_{design}_correltation.pdf",
         dispest = "PipelineData/Plots/Dispersion/setLightDarkLight_design_{design}_dispersionestimates.png",
-        deseq_result = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_deseq_res_obj.RData"
+        condresult = "PipelineData/IntermediateData/setLightDarkLight_design_{design}_deseq_res_obj.RData"
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][0]
     script:
@@ -301,7 +301,7 @@ rule extract_result_LightDark:
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
-        result_table = "PipelineData/Tables/DESeq/setLightDark_design_{design}_deseq_{condition}_vs_{baseline}.tsv"
+        result_table = "PipelineData/Tables/DESeq/setLightDark_design_{design}_cond{condition}_vs_base{baseline}.tsv"
     script: "extractDESeqResult.R"
 
 
@@ -312,16 +312,16 @@ rule extract_result_LightDarkLight:
     params:
         design = lambda wildcards: DESIGNS[wildcards.design][1]
     output:
-        result_table = "PipelineData/Tables/DESeq/setLightDarkLight_design_{design}_deseq_{condition}_vs_{baseline}.tsv"
+        result_table = "PipelineData/Tables/DESeq/setLightDarkLight_design_{design}_cond{condition}_vs{baseline}.tsv"
     script: "extractDESeqResult.R"
 
 
 rule plotFoldPval:
     input:
-        table = "PipelineData/Tables/DESeq/set{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
+        table = "PipelineData/Tables/DESeq/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.tsv",
         tag2name = "locusTagtoGeneName.csv"
     output:
-        plot = "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_base_{baseline}.html"
+        plot = "PipelineData/Plots/Vulcano/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.html"
     run:
         import pandas as pd
         import plotly.graph_objs as go
@@ -403,28 +403,28 @@ rule PlotPCA:
 
 rule KEGGEnrichment:
     input:
-        defile = "PipelineData/Tables/DESeq/set{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
+        defile = "PipelineData/Tables/DESeq/set{mode}_design_{design}_cond{condition}_vs_{baseline}.tsv",
         setup = rules.setup.output.install_file
     output:
-        up="PipelineData/Tables/Enrichment/KEGG_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_upregulated.tsv",
-        down="PipelineData/Tables/Enrichment/KEGG_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_downregulated.tsv"
+        up="PipelineData/Tables/Enrichment/KEGG_set{mode}_design_{design}_cond{condition}_vs_{baseline}_ud_upregulated.tsv",
+        down="PipelineData/Tables/Enrichment/KEGG_set{mode}_design_{design}_cond{condition}_vs_{baseline}_ud_downregulated.tsv"
     script: "keggenrichment.R"
 
 rule GOEnrichment:
     input:
         setup = rules.GOSetup.output.finished_file,
-        defile = "PipelineData/Tables/DESeq/set{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
+        defile = "PipelineData/Tables/DESeq/set{mode}_design_{design}_cond{condition}_vs_base{baseline}.tsv",
     output:
-        up = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_upregulated.tsv",
-        down = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_downregulated.tsv"
+        up = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_upregulated.tsv",
+        down = "PipelineData/Tables/Enrichment/GO_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_downregulated.tsv"
     script: "GOEnrichment.R"
 
 
 rule PlotEnrichment:
     input:
-        table = "PipelineData/Tables/Enrichment/{enrichment}_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.tsv"
+        table = "PipelineData/Tables/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.tsv"
     output:
-        plot =  "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html"
+        plot =  "PipelineData/Plots/Enrichment/{enrichment}_set{mode}_design_{design}_cond{condition}_vs_base{baseline}_ud_{updown}.html"
     run:
         import plotly.graph_objects as go
         import plotly.express as px
