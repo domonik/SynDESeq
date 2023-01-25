@@ -9,9 +9,9 @@ detable <- read.table(defile,sep="\t",header=TRUE)
 detable <- na.omit(detable)
 detable <- detable[!grepl("UTR", rownames(detable)), ]
 
-up <- detable$log2FoldChange >= 1 & detable$padj < 0.05
+up <- detable$log2FoldChange >= 0.8 & detable$padj < 0.05
 up <- detable[up, ]
-down <- detable$log2FoldChange <= -1 & detable$padj < 0.05
+down <- detable$log2FoldChange <= -0.8 & detable$padj < 0.05
 down <- detable[down, ]
 ekeggup <- enrichKEGG(gene         = as.character(rownames(up)),
                         universe      = as.character(rownames(detable)),
