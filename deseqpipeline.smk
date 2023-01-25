@@ -33,10 +33,14 @@ rule all:
             condition=["M", "M", "M"],baseline=["C", "C", "C"],design=["rf", "rf", "rf"],mode=["Light", "LightDark",
                                                                                                   "LightDarkLight"]
             ),
-        foo = expand(
-            "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv",zip,
-            condition=["M"],baseline=["C"],design=["rf"], mode=["LightDark"]
+        enrich1 = expand(
+            "PipelineData/Enrichment/{enrichment}/plot/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html" ,
+            condition=["M"],baseline=["C", "TC"],design=["rf"], mode=["Light", "LightDark", "LightDarkLight"], enrichment=["GO", "KEGG"], updown=["upregulated", "downregulated"]
             ),
+        enrich2= expand(
+            "PipelineData/Enrichment/{enrichment}/plot/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html",
+                condition=["C"],baseline=["TC"],design=["rf"],mode=["Light", "LightDark", "LightDarkLight"],enrichment=["GO", "KEGG"],updown=["upregulated", "downregulated"]
+        ),
 
 
 rule setup:
@@ -402,7 +406,8 @@ rule KEGGEnrichment:
         defile = "PipelineData/Tables/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
         setup = rules.setup.output.install_file
     output:
-        file = "PipelineData/Enrichment/KEGG/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv"
+        up="PipelineData/Enrichment/KEGG/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_upregulated.tsv",
+        down="PipelineData/Enrichment/KEGG/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_downregulated.tsv"
     script: "keggenrichment.R"
 
 rule GOEnrichment:
@@ -410,5 +415,33 @@ rule GOEnrichment:
         setup = rules.GOSetup.output.finished_file,
         defile = "PipelineData/Tables/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.tsv",
     output:
-        file = "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}.csv"
+        up = "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_upregulated.tsv",
+        down = "PipelineData/Enrichment/GO/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_downregulated.tsv"
     script: "GOEnrichment.R"
+
+
+rule PlotEnrichment:
+    input:
+        table = "PipelineData/Enrichment/{enrichment}/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.tsv"
+    output:
+        plot =  "PipelineData/Enrichment/{enrichment}/plot/{mode}_design_{design}_deseq_{condition}_vs_{baseline}_ud_{updown}.html"
+    run:
+        import plotly.graph_objects as go
+        import plotly.express as px
+        import pandas as pd
+        enriched = pd.read_csv(input.table, sep="\t")
+        if len(enriched) == 0:
+            raise IndexError("Table is empty: Nothing to plot")
+        fig = px.bar(enriched, x="Count", y="Description", color="p.adjust")
+        ptitle = f"{wildcards.updown.upper()} Set:{wildcards.mode} Condition:{CONDIMAP[wildcards.condition]} vs Base:{CONDIMAP[wildcards.baseline]}"
+
+        fig.update_layout(
+            title=ptitle,
+            legend_title="Interesting or not",
+            font=dict(
+                size=18,
+            ),
+            yaxis = {'categoryorder': 'total ascending'}
+        )
+        #fig.update_coloraxes(reversescale=True)
+        fig.write_html(output.plot)
